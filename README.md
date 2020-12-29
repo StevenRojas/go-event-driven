@@ -1,1 +1,1 @@
-# go-kafka-pb
+# go-event-driven
