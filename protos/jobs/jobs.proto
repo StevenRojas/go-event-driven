@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+
+option go_package = "protos/jobs";
+package jobs;
+
+// Defines a job that should be executed for a microservice that is listen in a channel for a given pattern
+message Job {
+  // Job name, used for monitoring
+  string name = 1;
+
+  // Channel name used for send the job into a messaging queue
+  string channel = 2;
+
+  // Pattern used to identify the service that should perform the task
+  string pattern = 3;
+
+  // Name of the stream to send data
+  string stream_name = 4;
+
+  // The task that should be performed by the service. 
+  // It contains the information needed by a collector, generator, dispatcher, etc
+  google.protobuf.Any task = 5;
+
+  // Next job to be executed in sequence if any. 
+  // The service that is performing the current job should send the next job to the messaging queue
+  Job next = 6;
+}

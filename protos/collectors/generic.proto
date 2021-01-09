@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+
+option go_package = "protos/collectors";
+package collectors;
+
+// List of possible credential types to use by an API collector
+enum ApiCredentialEnum {
+  INVALID = 0;
+  UNSET = 1;
+  KEY = 2;
+  JWT = 3;
+  EMPTY = 4;
+}
+
+// API key
+message ApiKey {
+  string key = 1;
+}
+
+// API JWT
+message ApiJwt {
+  // JWT string
+  string jwt = 1;
+
+  // if bearer prefix should be used or not
+  bool bearer = 2;
+}
+
+// Pagination information
+message Pagination {
+  // start record
+  int32 start = 1;
+
+  // number of records to get in a single call
+  int32 limit = 2; 
+}
+
+message Query {
+  // query name, used to map the results of the query
+  string name = 1;
+
+  // SQL to be executed to collect the data
+  string sql = 2;
+
+  // if pagination is used. If so, the collector will send the collected data into the messaging queue in batches
+  bool use_pagination = 3;
+
+  // Pagination info
+  Pagination pagination = 4;
+}
+
+// Response data. The concrete type is defined at mappers.proto file
+// The collector and generator services uses the concrete type to handle the data
+message Response {
+  google.protobuf.Any mapper = 1;
+}
+
+message ApiCollectorTask {
+  // Instance name, used for monitoring
+  string instance = 1;
+
+  // API endpoint
+  string url = 2;
+
+  // REST method
+  string method = 3;
+
+  // Cretendial type to use
+  ApiCredentialEnum credential_type = 4;
+
+  // credential struct with the information needed to authenticate the API call
+  oneof credendial {
+    ApiKey apiKey = 5;
+    ApiJwt apiJwt = 6;
+  }
+
+  // Map of headers that should be included in the API call
+  map<string, string> headers = 7;
+
+  // if pagination is used. If so, the collector will send the collected data into the messaging queue in batches
+  bool use_pagination = 8;
+
+  // Pagination info
+  Pagination pagination = 9;
+
+  // If cache should be used. If so, the collector will try to find the data in cache.
+  // TODO: Needs to define cache eviction policies 
+  bool use_cache = 10;
+
+  // Response structure that will be sent to the messaging queue
+  Response response = 11;
+}
+
+message MysqlCollectorTask {
+  // Instance name, used for monitoring
+  string instance = 1;
+
+  // The credentials ID is an identifier that will be used by the collector in order to know which credentials use
+  // The credentials are stored in the collector services to avoid send them over the wire
+  string credentials_id = 2;
+
+  // Database name
+  string db_name = 3;
+
+  // List of queries that should be performed
+  repeated Query query_list = 4;
+
+  // If cache should be used. If so, the collector will try to find the data in cache.
+  bool use_cache = 5;
+
+  // Response structure that will be sent to the messaging queue
+  Response response = 6;
+}

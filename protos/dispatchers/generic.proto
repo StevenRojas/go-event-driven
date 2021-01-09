@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+option go_package = "protos/dispatchers";
+package dispatchers;
+
+// Report file
+message ReportFile {
+  // Path and filename where the generated report is stored temporally
+  string report_filepath = 1;
+}
+
+// Email dispatcher to send the report(s) attached in an email. 
+// This dispatcher can be used as notifier too, in conjuntion with other dispatchers
+message EmailDispatcherTask {
+  // Instance name, used by monitoring
+  string instance = 1;
+
+  // Email subject
+  string subject = 2;
+
+  // Email body
+  string body = 3;
+
+  // Email body rendered as HTML
+  bool is_html = 4;
+
+  // Recipient list
+  repeated string recipient = 5;
+
+  // CCs list
+  repeated string cc = 6;
+
+  // BCCs list
+  repeated string bcc = 7;
+
+  // List of reports to be attached in the email
+  repeated ReportFile report = 8;
+}
+
+message S3DispatcherTask {
+  // Instance name, used by monitoring
+  string instance = 1;
+
+  // AWS secret key
+  string secret_key = 2;
+
+  // AWS access key
+  string access_key = 3;
+  
+  // AWS tocken
+  string token = 4;
+
+  // AWS region
+  string region = 5;
+
+  // Bucket name
+  string bucket = 6;
+
+  // List of reports to be uploaded to the S3 bucket
+  repeated ReportFile report = 7;
+}

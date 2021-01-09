@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+option go_package = "protos/collectors";
+
+package collectors;
+
+// Defines a specialized collector, which is a service with specific logic to collect data.
+// For example a service that gets data from DynamoDB with a very specific data structure
+message SpecializedCollector {
+  // Instance name, used for monitoring
+  string instance = 1;
+
+  // Name of the collector service that should be executed
+  string collector_name = 2;
+
+  // All information needed by the service in order to collect the data
+  google.protobuf.Any metadata = 3;
+}
+
+// Metadata for specialized collector service one (just an example)
+message MetadataOne {
+  string field1 = 1;
+}
+
+// Metadata for specialized collector service two (just an example)
+message MetadataTwo {
+  string field1 = 1;
+  int32 field2 = 2;
+}

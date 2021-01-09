@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+option go_package = "protos/generators";
+
+package generators;
+
+// Defines a specialized generator, which is a service with specific logic to generate a report.
+// For example a service that gets data from DynamoDB with a very specific data structure
+message SpecializedGenerator {
+  // Instance name, used for monitoring
+  string instance = 1;
+
+  // Name of the generator service that should be executed
+  string generator_name = 2;
+
+  // All information needed by the service in order to generate the report
+  google.protobuf.Any metadata = 3;
+}
+
+// Metadata for specialized generator service one (just an example)
+message MetadataOne {
+  string field1 = 1;
+}
+
+// Metadata for specialized generator service two (just an example)
+message MetadataTwo {
+  string field1 = 1;
+  int32 field2 = 2;
+}

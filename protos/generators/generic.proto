@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+
+option go_package = "protos/generators";
+package generators;
+
+enum FormatEnum {
+  INVALID = 0;
+  UNSET = 1;
+  XLSX = 2;
+  PDF = 3;
+  CSV = 4;
+  OTHER = 5;
+}
+
+// Template information. File to be used as a template by the generator
+message Template {
+  // Template name, used by monitoring
+  string name = 1;
+
+  // Subfolder name
+  string folder = 2;
+
+  // Filename
+  string filename = 3;
+}
+
+message Generator {
+  // Instance name, used by monitoring
+  string instance = 1;
+
+  // File format to be generated
+  FormatEnum format = 2;
+
+  // Template used by the generator
+  Template template = 3;
+
+  // Path and filename to store the generated report temporally
+  string report_filepath = 4;
+
+  // Data mapper to be used by the generator. The concrete type is defined at mappers.proto file
+  google.protobuf.Any data_mapper = 5;
+
+  // Extra data to be used by the template. Could be fixed values or references to fields using curly braces "{Query.FieldName}"
+  map<string, string> template_mapper = 6;
+  
+  // Metadata to be included in the report file
+  google.protobuf.Any metadata = 7;
+}
+
+// Metadata to be included in the Excel report file
+message ExcelMetadata {
+  string title = 1;
+  string author = 2;
+  string company = 3;
+}

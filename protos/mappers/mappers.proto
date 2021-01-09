@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option go_package = "protos/mappers";
+package mappers;
+
+// Data type list
+enum DataTypeEnum {
+  INVALID = 0;
+  UNSET = 1;
+  STRING = 2;
+  INTEGER = 3;
+  DECIMAL = 4;
+  BOOLEAN = 5;
+}
+
+// Excel column defition
+message ExcelColumn {
+  // Column name (A, B, C, etc)
+  string column_name = 1;
+
+  // Column data type
+  DataTypeEnum column_type = 2;
+}
+
+// Excel data mapper. A map of each query field to the corresponding excel column
+message ExcelDataMapper {
+  map<string, ExcelColumn> columns = 1;
+}
