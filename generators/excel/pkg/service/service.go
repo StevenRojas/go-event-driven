@@ -1,13 +1,12 @@
 package service
 
 import (
-	"StevenRojas/go-reporting/collectors/pkg/collector"
-	"StevenRojas/go-reporting/collectors/pkg/protos/collectors"
-	"StevenRojas/go-reporting/collectors/pkg/protos/jobs"
+	"StevenRojas/go-reporting/generators/excel/pkg/protos/jobs"
+	"fmt"
 
 	glog "github.com/StevenRojas/go-logger-wrapper"
 	goredis "github.com/StevenRojas/go-redis-mq"
-	proto "github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 type Service interface {
@@ -27,7 +26,7 @@ func NewService(redis goredis.RedisWrapper, logger glog.LoggerWrapper) Service {
 }
 
 func (s *service) ListenForJobs(queueName string) error {
-	errorChan := make(chan error) // TODO: listen for errors in the messaging queue
+	errorChan := make(chan error)
 	// Create a messaging queue for listen jobs
 	queue, err := s.redis.CreateQueue(queueName, errorChan)
 	if err != nil {
@@ -39,7 +38,7 @@ func (s *service) ListenForJobs(queueName string) error {
 	go s.processMessages(receiver)
 	// Add a consumer to the messaging queue
 	queue.Subscribe(receiver, errorChan)
-	s.logger.Info("Listen for Collector jobs...")
+	s.logger.Info("Listen for Generator jobs...")
 	return nil
 }
 
@@ -53,29 +52,30 @@ func (s *service) processMessages(receiver chan []byte) {
 		s.logger.Info("Job name: " + job.GetName())
 		s.logger.Info("Job pattern: " + job.Pattern)
 
-		go s.collect(&job)
-		// Send next job in stack of jobs
-		go s.sendNextJob(job.Next)
+		go s.listenForData(&job)
+
+		// TODO: Send next job in stack of jobs when the file is ready
+		//go s.sendNextJob(job.Next)
 
 	}
 }
 
-func (s *service) collect(job *jobs.Job) {
-	feedStream := s.redis.CreateStream(job.StreamName, 1)
-	switch job.Pattern {
-	case "mysql":
-		var task collectors.MysqlCollectorTask
-		if err := proto.Unmarshal(job.Task.Value, &task); err != nil {
-			s.logger.Info("Unable to deserialize task into MysqlCollector")
+func (s *service) listenForData(job *jobs.Job) {
+	feedStream := s.redis.CreateStream(job.StreamName, 0)
+	go feedStream.Consume(0)
+
+	go func() {
+		for {
+			select {
+			case m := <-feedStream.MessageChannel():
+				fmt.Printf("message from stream: %v\n", m)
+			case e := <-feedStream.ErrorChannel():
+				fmt.Printf("error from stream: %v\n", e)
+			case f := <-feedStream.FinishedChannel():
+				fmt.Printf("Finish collecting data %v\n", f)
+			}
 		}
-		mysqlCollector, _ := collector.NewMySQLCollector(&task, feedStream, s.logger)
-		s.logger.Info("Collect data and send it to stream", job.StreamName)
-		go mysqlCollector.Collect()
-	case "api":
-		// TODO: add collector
-	default:
-		// TODO: notify about unsupported collector type
-	}
+	}()
 }
 
 func (s *service) sendNextJob(job *jobs.Job) {

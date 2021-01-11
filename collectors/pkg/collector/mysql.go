@@ -45,7 +45,7 @@ func (c *mysqlCollector) runQuery(sql string) {
 	c.logger.Info("Query executed, returning results")
 	var lastID string
 	// Fake data
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= 15; i++ {
 		result := make(map[string]interface{})
 		result["id"] = i
 		result["name"] = fmt.Sprintf("Name-%d", i)
