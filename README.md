@@ -107,39 +107,154 @@ The goal of this set of services is to collect the data needed for each report. 
 
 ### Listen for jobs in Messaging Queue
 ```go
-func (as *apiService) ListenForJobs(queueName string) error {
-  errorChan := make(chan error)
-  queue, err := as.redis.CreateQueue(queueName, errorChan)
-  if err != nil {
-    as.logger.Error("Error creating queue", err)
-    return err
-  }
-  receiver := make(chan []byte)
-  go as.processMessages(receiver)
-  queue.CreateConsumer(receiver, errorChan)
-  as.logger.Info("Listen for API Collector jobs...")
-  return nil
+func (s *service) ListenForJobs(queueName string) error {
+	errorChan := make(chan error) // TODO: listen for errors in the messaging queue
+	// Create a messaging queue for listen jobs
+	queue, err := s.redis.CreateQueue(queueName, errorChan)
+	if err != nil {
+		s.logger.Error("Error creating queue", err)
+		return err
+	}
+	receiver := make(chan []byte)
+	// Go routine that process the incoming messages
+	go s.processMessages(receiver)
+	// Add a consumer to the messaging queue
+	queue.Subscribe(receiver, errorChan)
+	s.logger.Info("Listen for Collector jobs...")
+	return nil
 }
 
-func (as *apiService) processMessages(receiver chan []byte) {
-  for message := range receiver {
-    as.logger.Info("Message get from queue")
-    var job jobs.Job
-    if err := proto.Unmarshal(message, &job); err != nil {
-      as.logger.Error("Error unmarshalling the message into a Job", err)
-    }
-    as.logger.Info("Job name: " + job.GetName())
-    as.logger.Info("Job pattern: " + job.GetPattern())
-  }
+func (s *service) processMessages(receiver chan []byte) {
+	for message := range receiver {
+		s.logger.Info("Message get from queue")
+		var job jobs.Job
+		if err := proto.Unmarshal(message, &job); err != nil {
+			s.logger.Error("Error unmarshalling the message into a Job", err)
+		}
+		s.logger.Info("Job name: " + job.GetName())
+		s.logger.Info("Job pattern: " + job.Pattern)
+
+		go s.collect(&job)
+		// Send next job in stack of jobs
+		go s.sendNextJob(job.Next)
+
+	}
+}
+
+func (s *service) collect(job *jobs.Job) {
+	feedStream := s.redis.CreateStream(job.StreamName, 1)
+	switch job.Pattern {
+	case "mysql":
+		var task collectors.MysqlCollectorTask
+		if err := proto.Unmarshal(job.Task.Value, &task); err != nil {
+			s.logger.Info("Unable to deserialize task into MysqlCollector")
+		}
+		mysqlCollector, _ := collector.NewMySQLCollector(&task, feedStream, s.logger)
+		s.logger.Info("Collect data and send it to stream", job.StreamName)
+		go mysqlCollector.Collect()
+	case "api":
+		// TODO: add collector
+	default:
+		// TODO: notify about unsupported collector type
+	}
 }
 ```
 
 ### Send dataset into stream
 ```go
+func (c *mysqlCollector) Collect() {
+	log := fmt.Sprintf("Collecting from database [%s] using cache [%t] and credential IDs [%s]",
+		c.task.DbName, c.task.UseCache, c.task.CredentialsId)
+	c.logger.Info(log)
+	c.logger.Info("running the following queries")
+	for _, query := range c.task.QueryList {
+		log = fmt.Sprintf("Query name [%s]; using pagination [%t]; query: [%s]",
+			query.Name, query.UsePagination, query.Sql)
+		c.logger.Info(log)
+		c.runQuery(query.Sql)
+	}
+}
+
+func (c *mysqlCollector) runQuery(sql string) {
+	c.logger.Info("Query executed, returning results")
+	var lastID string
+	// Fake data
+	for i := 1; i <= 15; i++ {
+		result := make(map[string]interface{})
+		result["id"] = i
+		result["name"] = fmt.Sprintf("Name-%d", i)
+		result["email"] = fmt.Sprintf("email%d@g.com", i)
+		result["active"] = i%2 == 0
+
+		// Binary marshal
+		b, err := msgpack.Marshal(result)
+		// Send to stream
+		lastID, err = c.stream.Publish(b)
+		if err != nil {
+			c.logger.Error("Unable to marshal stream message", err)
+		}
+		fmt.Printf("Published row : %v\n", result)
+		time.Sleep(500 * time.Millisecond)
+	}
+	c.logger.Info("Last stream ID: " + lastID)
+	// TODO: send message with the last stream ID
+}
+```
+### Sending next jobs to the messaging queue
+```go
+func (s *service) sendNextJob(job *jobs.Job) {
+	if job == nil {
+		return
+	}
+	s.logger.Info("Sending next job", job.Channel)
+	errorChan := make(chan error)
+	queue, err := s.redis.CreateQueue(job.Channel, errorChan)
+	if err != nil {
+		s.logger.Error("Error creating queue", job.Channel, err)
+	}
+	serJob, _ := proto.Marshal(job)
+	queue.Publish(serJob)
+}
 ```
 
 ## Generator microservices
 The goal of these microservices is use the data that is comming from  `Collectors` through the `Messaging Queue` and generate a report in an specific format. There are genercic microservices that uses predefined templates with `Mustache` and also specialized generators. The files are stored in a temporal location where the `Dispatchers` will get them 
+
+```go
+func (s *service) ListenForJobs(queueName string) error {
+  ...
+  go s.processMessages(receiver)
+  ...
+}
+
+func (s *service) processMessages(receiver chan []byte) {
+   ...
+   go s.listenForData(&job)
+   ...
+}
+
+func (s *service) listenForData(job *jobs.Job) {
+	feedStream := s.redis.CreateStream(job.StreamName, 0)
+	go feedStream.Consume(0)
+
+	go func() {
+		for {
+			select {
+			case m := <-feedStream.MessageChannel():
+				fmt.Printf("message from stream: %v\n", m)
+				// TODO: process message (i.e.: add row to excel)
+			case e := <-feedStream.ErrorChannel():
+				fmt.Printf("error from stream: %v\n", e)
+				// TODO: process error
+			case f := <-feedStream.FinishedChannel():
+				fmt.Printf("Finish collecting data %v\n", f)
+				// TODO: store the file in temp location and send next job
+			}
+		}
+	}()
+}
+
+```
 
 ## Dispatcher microservices
 Once the `Generator` sevice creates a report file, one of this set of services dispatch the file to the target, which could be an Email, AWS S3, Drive, etc., or even an API.
